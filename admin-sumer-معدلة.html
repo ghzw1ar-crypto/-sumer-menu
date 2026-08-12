@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sumer Menu - Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#171717;--muted:#737373;--line:#e5e7eb;--dark:#111827;--green:#16833b;--red:#b00020}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+.wrap{max-width:1050px;margin:auto;padding:12px}.card{background:var(--card);padding:15px;border-radius:18px;margin-bottom:13px;border:1px solid #eee;box-shadow:0 4px 18px #0000000a}
+.hidden{display:none}.top{display:flex;justify-content:space-between;align-items:center;gap:12px}.top h2{margin:0 0 4px;font-size:20px}.top small,.muted{color:var(--muted);font-size:13px}
+input:not([type=checkbox]),select{width:100%;padding:13px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:16px;outline:none}
+input:not([type=checkbox]):focus,select:focus{border-color:#888;box-shadow:0 0 0 3px #0000000b}
+button{width:100%;padding:12px;border:0;border-radius:12px;background:var(--dark);color:#fff;font-size:15px;font-weight:700;cursor:pointer}.danger{background:var(--red)}.gray{background:#666}.green{background:var(--green)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.form-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:13px}.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}.stat b{display:block;font-size:22px}.stat span{font-size:12px;color:var(--muted)}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.section-head h3{margin:0}.section-head button{width:auto;padding:9px 13px}
+.toolbar{display:grid;grid-template-columns:1fr 180px;gap:8px;margin:12px 0}
+.item{border:1px solid var(--line);padding:12px;border-radius:15px;margin:9px 0;background:#fff}.item img{width:76px;height:76px;object-fit:cover;float:right;margin-left:11px;border-radius:12px;background:#eee}.item h4{margin:2px 0 6px;font-size:17px}.meta{font-size:13px;color:#666;line-height:1.7}.clear{clear:both}
+.badge{display:inline-block;padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700;margin-top:5px}.on{background:#dcfce7;color:#166534}.off{background:#fee2e2;color:#991b1b}
+.item-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:10px}.item-actions button{padding:10px;font-size:13px}
+@media(max-width:600px){.wrap{padding:9px}.card{padding:13px;border-radius:15px}.grid{grid-template-columns:1fr}.top{align-items:flex-start}.top h2{font-size:18px}.stats{gap:6px}.stat{padding:9px 4px}.stat b{font-size:19px}.toolbar{grid-template-columns:1fr}.item-actions{grid-template-columns:1fr 1fr}.item-actions button:last-child{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div id="login" class="card">
+<h2>🍽️ Sumer Menu — تسجيل الدخول</h2>
+<input id="email" type="email" placeholder="الإيميل">
+<input id="password" type="password" placeholder="كلمة السر">
+<button onclick="login()">دخول</button>
+<div id="loginMsg"></div>
+</div>
+
+<div id="panel" class="hidden">
+<div class="card top"><div><h2>🍽️ Sumer Menu</h2><small>لوحة إدارة المنيو</small></div><button class="gray" onclick="logout()" style="width:auto">خروج</button></div>
+<div class="stats">
+<div class="stat"><b id="totalStat">0</b><span>كل الأصناف</span></div>
+<div class="stat"><b id="availableStat">0</b><span>متوفر</span></div>
+<div class="stat"><b id="unavailableStat">0</b><span>غير متوفر</span></div>
+</div>
+<div class="card"><h3 id="title">➕ إضافة صنف</h3><input id="editId" type="hidden">
+<div class="grid"><input id="name" placeholder="اسم الصنف"><input id="price" type="number" placeholder="السعر"><input id="category" placeholder="القسم"><input id="image_url" placeholder="رابط الصورة"></div>
+<label style="display:block;margin:10px 0"><input id="available" type="checkbox" checked style="width:auto"> متوفر</label>
+<div class="form-actions"><button class="green" onclick="save()">حفظ الصنف</button><button class="gray" onclick="clearForm()">إلغاء</button></div><div id="msg"></div></div>
+<div class="card"><div class="section-head"><h3>📋 إدارة الأصناف</h3><button onclick="load()">↻ تحديث</button></div>
+<div class="toolbar"><input id="search" placeholder="🔎 ابحث عن صنف..." oninput="renderFiltered()"><select id="filter" onchange="renderFiltered()"><option value="all">كل الأقسام</option></select></div>
+<div id="count" class="muted"></div><div id="items">جارٍ التحميل...</div></div></div>
+
+<script>
+const SUPABASE_URL="https://glbugvsorxtzixgexdak.supabase.co";
+const SUPABASE_KEY="sb_publishable_8iv3CIQ3MaQ6E9oPgK6N8A_KTYGp-V6";
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+async function login(){
+ const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;
+ const {error}=await db.auth.signInWithPassword({email,password});
+ document.getElementById("loginMsg").textContent=error?"❌ "+error.message:"";
+ if(!error)show();
+}
+async function logout(){await db.auth.signOut();location.reload()}
+function show(){document.getElementById("login").classList.add("hidden");document.getElementById("panel").classList.remove("hidden");load()}
+let allItems=[];
+async function load(){
+ const box=document.getElementById("items");box.innerHTML="جارٍ تحميل الأصناف...";
+ const {data,error}=await db.from("menu_items").select("*").order("id");
+ if(error){box.textContent="❌ "+error.message;return} allItems=data||[];
+ document.getElementById("totalStat").textContent=allItems.length;
+ document.getElementById("availableStat").textContent=allItems.filter(x=>x.available).length;
+ document.getElementById("unavailableStat").textContent=allItems.filter(x=>!x.available).length;
+ const cats=[...new Set(allItems.map(x=>x.category).filter(Boolean))].sort();
+ document.getElementById("filter").innerHTML='<option value="all">كل الأقسام</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+ renderFiltered();
+}
+function renderFiltered(){
+ const q=(document.getElementById("search")?.value||"").trim().toLowerCase(),cat=document.getElementById("filter")?.value||"all";
+ const data=allItems.filter(x=>{const t=((x.name||"")+" "+(x.category||"")).toLowerCase();return(!q||t.includes(q))&&(cat==="all"||x.category===cat)});
+ document.getElementById("count").textContent=`عرض ${data.length} من ${allItems.length} صنف`;
+ const box=document.getElementById("items");if(!data.length){box.innerHTML='<div class="muted" style="padding:15px;text-align:center">لا توجد نتائج</div>';return}
+ box.innerHTML=data.map(x=>`<div class="item">${x.image_url?`<img src="${esc(x.image_url)}" onerror="this.style.display='none'">`:""}<h4>${esc(x.name||"بدون اسم")}</h4><div class="meta">💰 السعر: <b>${x.price??""}</b><br>📂 القسم: ${esc(x.category||"بدون قسم")}</div><span class="badge ${x.available?"on":"off"}">${x.available?"🟢 متوفر":"🔴 غير متوفر"}</span><div class="clear"></div><div class="item-actions"><button onclick='edit(${JSON.stringify(x)})'>✏️ تعديل</button><button class="${x.available?"gray":"green"}" onclick="toggle(${x.id},${x.available})">${x.available?"⏸ إيقاف":"▶ تشغيل"}</button><button class="danger" onclick="del(${x.id})">🗑 حذف</button></div></div>`).join("");
+}
+function edit(x){
+ document.getElementById("editId").value=x.id;document.getElementById("name").value=x.name||"";
+ document.getElementById("price").value=x.price??"";document.getElementById("category").value=x.category||"";
+ document.getElementById("image_url").value=x.image_url||"";document.getElementById("available").checked=!!x.available;
+ document.getElementById("title").textContent="✏️ تعديل الصنف رقم "+x.id;scrollTo(0,0)
+}
+function clearForm(){
+ ["editId","name","price","category","image_url"].forEach(id=>document.getElementById(id).value="");
+ document.getElementById("available").checked=true;document.getElementById("title").textContent="➕ إضافة صنف";
+}
+async function save(){
+ const id=document.getElementById("editId").value;
+ const obj={name:document.getElementById("name").value.trim(),price:Number(document.getElementById("price").value),
+ category:document.getElementById("category").value.trim(),image_url:document.getElementById("image_url").value.trim(),
+ available:document.getElementById("available").checked};
+ if(!obj.name){document.getElementById("msg").textContent="❌ اكتب اسم الصنف";return}
+ const r=id?await db.from("menu_items").update(obj).eq("id",id):await db.from("menu_items").insert(obj);
+ document.getElementById("msg").textContent=r.error?"❌ "+r.error.message:"✅ تم الحفظ";
+ if(!r.error){clearForm();load()}
+}
+async function toggle(id,current){const r=await db.from("menu_items").update({available:!current}).eq("id",id);if(r.error)alert(r.error.message);load()}
+async function del(id){if(!confirm("متأكد من حذف الصنف؟"))return;const r=await db.from("menu_items").delete().eq("id",id);if(r.error)alert(r.error.message);load()}
+function esc(v){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+db.auth.getSession().then(({data})=>{if(data.session)show()});
+</script>
+</body>
+</html>
